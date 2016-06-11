@@ -1,7 +1,9 @@
 package org.patricknoir.frdm.impl
 
-import cats.data.Reader
+import cats.data._
 import org.patricknoir.frdm.Repository
+
+import scala.util.Try
 
 trait BetRepository extends Repository[BetReceipt, Bet] {
 
@@ -10,20 +12,24 @@ trait BetRepository extends Repository[BetReceipt, Bet] {
 
 }
 
-class InMemoryRepository[Id, Entity](keyExtractor: Reader[Entity, Id]) extends Repository[Id, Entity] {
+case class InMemoryRepository[Id, Entity](keyExtractor: Reader[Entity, Id], entities: Map[Id, Entity] = Map.empty[Id, Entity]) extends Repository[Id, Entity] {
 
-  private var entities = Map.empty[Id, Entity]
+  def run[A](a: => A): Error[A] = Xor.fromTry(Try(a)).leftMap(ex => List(ex.getMessage))
 
-  def query(id: Id): Response[Entity] = response {
-    entities(id)
+  def get[A](r: => A): Response[A] = State { _ =>
+    (this, Xor.fromTry(Try(r)).leftMap(ex => List(ex.getMessage)))
   }
+
+  def set[A](s: Repository[Id, Entity])(r: => A): Response[A] = State { _ =>
+    (s, run(r))
+  }
+
+  def query(id: Id): Response[Entity] = get { entities(id) }
 
   def store(entity: Entity): Response[Id] = store(keyExtractor(entity), entity)
 
-  private def store(key: Id, value: Entity): Response[Id] = response {
-    //WARN: side effects! This is no threadsafe
-    entities += key -> value
-    key
+  private def store(key: Id, value: Entity): Response[Id] = State { _ =>
+    (this.copy(entities = entities + (key -> value)), run(key))
   }
 }
 
