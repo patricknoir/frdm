@@ -20,7 +20,6 @@ case class InMemoryRepository[Id, Entity](keyExtractor: Reader[Entity, Id], enti
     (this, Xor.fromTry(Try(r)).leftMap(ex => List(ex.getMessage)))
   }
 
-
   def modify[A](s: Map[Id, Entity])(r: => A): Response[A] =  State { _ =>
     (this.copy(entities = s), run(r))
   }
